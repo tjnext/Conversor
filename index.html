@@ -90,221 +90,221 @@
       text-align: center;
     }
 
+    .scrollable-table {
+      max-height: 300px;
+      overflow-y: auto;
+      margin-bottom: 10px;
+    }
+
     .download-btn {
-      margin-bottom: 30px;
       background: #1E90FF;
       color: white;
       border: none;
       padding: 8px 15px;
       border-radius: 5px;
       cursor: pointer;
+      margin-bottom: 10px;
+    }
+
+    .contador {
+      font-size: 0.9em;
+      color: #000;
+      margin-bottom: 10px;
+    }
+
+    .loader {
+      display: none;
+      margin: 20px auto;
     }
   </style>
 </head>
 <body>
 
-  <h1>Conversor de contatos 👥</h1>
+<h1>Conversor de contatos 👥</h1>
 
-  <div class="upload-box">
-    <label for="file-input" class="file-label">
-      selecionar arquivos 📂
-      <input type="file" id="file-input" multiple accept=".vcf,.csv,.xls,.xlsx">
-    </label>
-    <div id="file-names" style="color: white; margin-top: 10px; font-size: 0.9em;"></div>
-    <span>para <span class="file-type">XLSX</span></span>
-  </div>
+<div class="upload-box">
+  <label for="file-input" class="file-label">
+    selecionar arquivos 📂
+    <input type="file" id="file-input" multiple accept=".vcf,.csv,.xls,.xlsx">
+  </label>
+  <div id="file-names" style="color: white; margin-top: 10px; font-size: 0.9em;"></div>
+  <span>para <span class="file-type">XLSX</span></span>
+</div>
 
-  <button class="convert-btn" onclick="processarArquivos()">Converter</button>
+<button class="convert-btn" onclick="processarArquivos()">Converter</button>
 
-  <div class="table-container">
-    <div>
-      <h3>Números Válidos</h3>
+<div class="loader" id="loader">⏳ Processando arquivos...</div>
+
+<div class="table-container">
+  <div>
+    <h3>Números Válidos</h3>
+    <div class="scrollable-table">
       <table id="valid-table">
         <thead>
-          <tr>
-            <th>Nome</th>
-            <th>Telefone 📱</th>
-          </tr>
+        <tr>
+          <th>Nome</th>
+          <th>Telefone 📱</th>
+        </tr>
         </thead>
         <tbody></tbody>
       </table>
-      <button class="download-btn" onclick="baixarTabela('valid')">Baixar XLSX</button>
     </div>
-
-    <div>
-      <h3>Números Inválidos</h3>
-      <table id="invalid-table">
-        <thead>
-          <tr>
-            <th>Nome</th>
-            <th>Telefone 📱</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <button class="download-btn" onclick="baixarTabela('invalid')">Baixar XLSX</button>
-    </div>
+    <div class="contador" id="contador-valid"></div>
+    <button class="download-btn" onclick="baixarTabela('valid')">Baixar XLSX</button>
   </div>
 
-  <script>
-    const validPhones = [];
-    const invalidPhones = [];
+  <div>
+    <h3>Números Inválidos</h3>
+    <div class="scrollable-table">
+      <table id="invalid-table">
+        <thead>
+        <tr>
+          <th>Nome</th>
+          <th>Telefone 📱</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="contador" id="contador-invalid"></div>
+    <button class="download-btn" onclick="baixarTabela('invalid')">Baixar XLSX</button>
+  </div>
+</div>
 
-    document.getElementById("file-input").addEventListener('change', () => {
-      const nomes = Array.from(document.getElementById("file-input").files).map(f => f.name);
-      document.getElementById("file-names").innerHTML = nomes.join("<br>");
-    });
+<script>
+  const validPhones = [];
+  const invalidPhones = [];
 
-    function normalizarTelefone(tel) {
-      if (!tel) return "";
+  document.getElementById("file-input").addEventListener('change', () => {
+    const nomes = Array.from(document.getElementById("file-input").files).map(f => f.name);
+    document.getElementById("file-names").innerHTML = nomes.join("<br>");
+  });
 
-      // Se tem ':::', pegar só o primeiro número
-      if (tel.includes(":::")) {
-        tel = tel.split(":::")[0].trim();
-      }
+  function normalizarTelefone(tel) {
+    if (!tel) return "";
+    if (tel.includes(":::")) tel = tel.split(":::")[0].trim();
+    let numero = tel.replace(/\D/g, "").replace(/^0*(15|14|13|12)?/, "");
+    if (/^\d{8,9}$/.test(numero)) return "";
+    if (/^\d{10,11}$/.test(numero)) numero = "55" + numero;
+    else if (/^\d{12,13}$/.test(numero) && numero.startsWith("55")) {} 
+    else if (numero.length >= 10 && numero.length <= 13 && !numero.startsWith("55")) numero = "55" + numero;
+    numero = "+" + numero;
+    return /^\+55\d{10,11}$/.test(numero) ? numero : "";
+  }
 
-      // Remove tudo que não é número
-      let numero = tel.replace(/\D/g, "");
+  async function processarArquivos() {
+    validPhones.length = 0;
+    invalidPhones.length = 0;
+    atualizarTabelas();
+    document.getElementById("loader").style.display = "block";
 
-      // Remove prefixos como 015, 014, etc.
-      numero = numero.replace(/^0*(15|14|13|12)?/, "");
+    const arquivos = document.getElementById("file-input").files;
+    if (!arquivos.length) {
+      alert("Selecione pelo menos um arquivo.");
+      document.getElementById("loader").style.display = "none";
+      return;
+    }
 
-      // Se sobrar 8 ou 9 dígitos, assume que falta DDD
-      if (/^\d{8,9}$/.test(numero)) {
-        // Não há como adivinhar o DDD, então invalida
-        return "";
-      }
-
-      // Se tiver DDD mas sem o 55, adiciona
-      if (/^\d{10,11}$/.test(numero)) {
-        numero = "55" + numero;
-      }
-
-      // Se já começa com DDD (com 55), tudo certo
-      else if (/^\d{12,13}$/.test(numero) && numero.startsWith("55")) {
-        // tudo certo
-      }
-
-      // Se ainda não estiver no padrão, tenta corrigir números com DDD + número com hífens
-      else if (numero.length >= 10 && numero.length <= 13) {
-        if (!numero.startsWith("55")) {
-          numero = "55" + numero;
+    for (const arquivo of arquivos) {
+      const reader = new FileReader();
+      reader.onload = async function (e) {
+        try {
+          if (arquivo.name.endsWith(".vcf")) processarVCF(e.target.result);
+          else if (arquivo.name.endsWith(".csv")) processarCSV(e.target.result);
+          else if (arquivo.name.endsWith(".xls") || arquivo.name.endsWith(".xlsx")) processarExcel(e.target.result);
+        } catch (err) {
+          alert(`Erro ao processar o arquivo ${arquivo.name}: ${err.message}`);
+        } finally {
+          atualizarTabelas();
+          document.getElementById("loader").style.display = "none";
         }
-      }
-
-      // Adiciona o '+' no início
-      numero = "+" + numero;
-
-      // Valida final: deve ser +55 seguido de 10 ou 11 dígitos
-      if (/^\+55\d{10,11}$/.test(numero)) {
-        return numero;
-      }
-
-      return "";
+      };
+      if (arquivo.name.endsWith(".xls") || arquivo.name.endsWith(".xlsx")) reader.readAsArrayBuffer(arquivo);
+      else reader.readAsText(arquivo);
     }
+  }
 
-    function processarArquivos() {
-      validPhones.length = 0;
-      invalidPhones.length = 0;
-      document.querySelector("#valid-table tbody").innerHTML = "";
-      document.querySelector("#invalid-table tbody").innerHTML = "";
-
-      const arquivos = document.getElementById("file-input").files;
-      if (!arquivos.length) {
-        alert("Selecione pelo menos um arquivo.");
-        return;
+  function processarCSV(texto) {
+    const dados = Papa.parse(texto, { header: true }).data;
+    const vistos = new Set();
+    dados.forEach(row => {
+      const nome = [row["First Name"], row["Middle Name"], row["Last Name"]].filter(Boolean).map(s => s.trim()).join(" ").replace(/[^À-ſa-zA-Z0-9\s]/g, "").trim();
+      const telOriginal = row["Phone 1 - Value"] || "";
+      const tel = normalizarTelefone(telOriginal);
+      const chave = nome + tel;
+      const ehValido = nome && /^\+55\d{10,11}$/.test(tel);
+      if (!vistos.has(chave)) {
+        vistos.add(chave);
+        (ehValido ? validPhones : invalidPhones).push([nome || "(sem nome)", ehValido ? tel : telOriginal]);
       }
+    });
+  }
 
-      Array.from(arquivos).forEach(arquivo => {
-        const reader = new FileReader();
-        reader.onload = function (e) {
-          if (arquivo.name.endsWith(".vcf")) {
-            processarVCF(e.target.result);
-          } else if (arquivo.name.endsWith(".csv")) {
-            processarCSV(e.target.result);
-          }
-        };
-        reader.readAsText(arquivo);
-      });
-    }
-
-    function processarCSV(texto) {
-      const dados = Papa.parse(texto, { header: true }).data;
-      const vistos = new Set();
-
-      dados.forEach(row => {
-        const nome = [row["First Name"], row["Middle Name"], row["Last Name"]]
-          .filter(Boolean).map(s => s.trim()).join(" ").replace(/[^\w\s]/g, "").trim();
-
-        let telOriginal = row["Phone 1 - Value"] || "";
-        let tel = normalizarTelefone(telOriginal);
+  function processarVCF(texto) {
+    const contatos = texto.split("END:VCARD");
+    const vistos = new Set();
+    contatos.forEach(contato => {
+      const nomeMatch = contato.match(/FN:(.+)/);
+      const telMatches = [...contato.matchAll(/TEL[^:]*:(.+)/g)];
+      const nome = nomeMatch ? nomeMatch[1].trim() : "";
+      telMatches.forEach(match => {
+        const telOriginal = match[1].trim();
+        const tel = normalizarTelefone(telOriginal);
         const chave = nome + tel;
         const ehValido = nome && /^\+55\d{10,11}$/.test(tel);
-
         if (!vistos.has(chave)) {
           vistos.add(chave);
-          if (ehValido) validPhones.push([nome, tel]);
-          else invalidPhones.push([nome || "(sem nome)", telOriginal]);
+          (ehValido ? validPhones : invalidPhones).push([nome || "(sem nome)", ehValido ? tel : telOriginal]);
         }
       });
+    });
+  }
 
-      atualizarTabelas();
-    }
+  function processarExcel(buffer) {
+    const workbook = XLSX.read(buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(sheet);
+    const vistos = new Set();
+    json.forEach(row => {
+      const nome = [row["First Name"], row["Middle Name"], row["Last Name"]].filter(Boolean).map(s => s.trim()).join(" ").replace(/[^À-ſa-zA-Z0-9\s]/g, "").trim();
+      const telOriginal = row["Phone 1 - Value"] || row["Telefone"] || "";
+      const tel = normalizarTelefone(telOriginal);
+      const chave = nome + tel;
+      const ehValido = nome && /^\+55\d{10,11}$/.test(tel);
+      if (!vistos.has(chave)) {
+        vistos.add(chave);
+        (ehValido ? validPhones : invalidPhones).push([nome || "(sem nome)", ehValido ? tel : telOriginal]);
+      }
+    });
+  }
 
-    function processarVCF(texto) {
-      const contatos = texto.split("END:VCARD");
-      const vistos = new Set();
+  function atualizarTabelas() {
+    const validBody = document.querySelector("#valid-table tbody");
+    const invalidBody = document.querySelector("#invalid-table tbody");
+    validBody.innerHTML = "";
+    invalidBody.innerHTML = "";
+    validPhones.forEach(([nome, num]) => {
+      const row = validBody.insertRow();
+      row.insertCell().textContent = nome;
+      row.insertCell().textContent = num;
+    });
+    invalidPhones.forEach(([nome, num]) => {
+      const row = invalidBody.insertRow();
+      row.insertCell().textContent = nome;
+      row.insertCell().textContent = num;
+    });
+    document.getElementById("contador-valid").textContent = `Exibindo ${validPhones.length} contatos válidos.`;
+    document.getElementById("contador-invalid").textContent = `Exibindo ${invalidPhones.length} contatos inválidos.`;
+  }
 
-      contatos.forEach(contato => {
-        const nomeMatch = contato.match(/FN:(.+)/);
-        const telMatches = [...contato.matchAll(/TEL[^:]*:(.+)/g)];
-
-        const nome = nomeMatch ? nomeMatch[1].trim() : "";
-        telMatches.forEach(match => {
-          const telOriginal = match[1].trim();
-          const tel = normalizarTelefone(telOriginal);
-          const chave = nome + tel;
-          const ehValido = nome && /^\+55\d{10,11}$/.test(tel);
-
-          if (!vistos.has(chave)) {
-            vistos.add(chave);
-            if (ehValido) validPhones.push([nome, tel]);
-            else invalidPhones.push([nome || "(sem nome)", telOriginal]);
-          }
-        });
-      });
-
-      atualizarTabelas();
-    }
-
-    function atualizarTabelas() {
-      const validBody = document.querySelector("#valid-table tbody");
-      const invalidBody = document.querySelector("#invalid-table tbody");
-
-      validBody.innerHTML = "";
-      invalidBody.innerHTML = "";
-
-      validPhones.forEach(([nome, num]) => {
-        const row = validBody.insertRow();
-        row.insertCell().textContent = nome;
-        row.insertCell().textContent = num;
-      });
-
-      invalidPhones.forEach(([nome, num]) => {
-        const row = invalidBody.insertRow();
-        row.insertCell().textContent = nome;
-        row.insertCell().textContent = num;
-      });
-    }
-
-    function baixarTabela(tipo) {
-      const dados = tipo === 'valid' ? validPhones : invalidPhones;
-      const ws = XLSX.utils.aoa_to_sheet([["Nome", "Telefone"], ...dados]);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, tipo === 'valid' ? "Válidos" : "Inválidos");
-      XLSX.writeFile(wb, `${tipo}-telefones.xlsx`);
-    }
-  </script>
+  function baixarTabela(tipo) {
+    const dados = tipo === 'valid' ? validPhones : invalidPhones;
+    const ws = XLSX.utils.aoa_to_sheet([["Nome", "Telefone"], ...dados]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, tipo === 'valid' ? "Válidos" : "Inválidos");
+    XLSX.writeFile(wb, `${tipo}-telefones.xlsx`);
+  }
+</script>
 
 </body>
 </html>
